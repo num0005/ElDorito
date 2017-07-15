@@ -361,6 +361,11 @@ namespace Patches
 				scoreboardChud->HudWidgets[speakingPlayerIndex].StateData[0].ScoreboardFlags1 = (ChudDefinition::StateDataScoreboardFlags1)0;
 		}
 
+		bool showingFileShareBlocked() {
+			Web::Ui::ScreenLayer::Show("settings", "{}");
+			return true;
+		}
+
 		void ApplyAll()
 		{
 			// Rewire $hq.MatchmakingLeaveQueue() to end the game
@@ -456,6 +461,7 @@ namespace Patches
 			// enable controller buttons in HUD messages
 			Patch(0x6BC5D7, { 0x98,0xDE, 0x44, 0x02, 01 }).Apply();
 
+			Hook(0x6E0E0C, showingFileShareBlocked, HookFlags::IsCall).Apply();
 			Pointer(0x0169FCE0).Write(uint32_t(&c_main_menu_screen_widget_item_select_hook));
 		}
 

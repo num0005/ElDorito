@@ -13,6 +13,7 @@
 #include "../Blam/Tags/Scenario/Scenario.hpp"
 #include "../Patches/Core.hpp"
 #include "../Patches/Forge.hpp"
+#include "../Patches/ContentItems.hpp"
 #include "../Web/WebRenderer.hpp"
 #include "../Web/Ui/ScreenLayer.hpp"
 #include "ModuleServer.hpp"
@@ -23,9 +24,11 @@
 #include "../ThirdParty/rapidjson/document.h"
 #include "../ThirdParty/rapidjson/stringbuffer.h"
 #include "../ThirdParty/rapidjson/writer.h"
+#include "../ThirdParty/HttpRequest.hpp"
 #include <unordered_map>
 #include <codecvt>
 #include "../Blam/Tags/Camera/AreaScreenEffect.hpp"
+#include "../Web/Ui/WebVirtualKeyboard.hpp"
 
 namespace
 {
@@ -1059,6 +1062,49 @@ namespace
 
 	}
 
+	bool CommandDownloadMap(const std::vector<std::string>& Arguments, std::string& returnInfo)
+	{
+		if (Arguments.size() < 1)
+			return false;
+		returnInfo = "Trying to download:" + Arguments[0] + "\n";
+		HttpRequest req(L"ElDewrito/" + Utils::String::WidenString(Utils::Version::GetVersionString()), L"", L"");
+		if (!req.SendRequest(Utils::String::WidenString(Arguments[0]), L"GET", L"", L"", L"", NULL, 0))
+		{
+			returnInfo += "Error fetching map. Error code:" + std::to_string(req.lastError);
+			return false;
+		}
+		if (req.responseBody.size() != 0xF000)
+		{
+			returnInfo += "Incorrect file size (" + std::to_string(req.responseBody.size()) + " bytes)";
+			return false;
+		}
+		std::string header = std::string(&req.responseBody.at(0x0), &req.responseBody.at(0x4));
+		bool valid = (header == "_blf");
+
+		BYTE map_name[0x20];
+		int a = 0;
+		for (int i = 0x150; i <= 0x16F; i++) {
+			map_name[a] = req.responseBody[i];
+			a++;
+		}
+		// yes I know this looks ugly
+		map_name[30] = 0;
+		map_name[31] = 0;
+		if (valid) {
+			auto game = &Modules::ModuleGame::Instance();
+			std::wstring_convert<std::codecvt_utf8<wchar_t>> wstring_to_string;
+
+			game->forge_map = req.responseBody;
+			game->map_name = std::wstring(reinterpret_cast<wchar_t*>(map_name));
+
+			Web::Ui::WebVirtualKeyboard::Show("Save Map As", "", wstring_to_string.to_bytes(game->map_name));
+			return true;
+		} else {
+			returnInfo += "File is not a valid forge map";
+			return false;
+		}
+	}
+
 	bool VariableLanguageUpdated(const std::vector<std::string>& arguments, std::string& returnInfo)
 	{
 		if (arguments.size() < 1)
@@ -1157,6 +1203,8 @@ namespace Modules
 
 		AddCommand("ScreenEffectRange", "sefc_range", "Set the range of the default screen FX in the current scnr", eCommandFlagsNone, CommandScreenEffectRange, { "Index(int) sefc effect index", "Range(float) effect range" });
 
+		AddCommand("DownloadMap", "download_map", "", eCommandFlagsNone, CommandDownloadMap);
+
 		VarMenuURL = AddVariableString("MenuURL", "menu_url", "url(string) The URL of the page you want to load inside the menu", eCommandFlagsArchived, "http://scooterpsu.github.io/");
 
 		VarLanguage = AddVariableString("Language", "language", "The language to use", eCommandFlagsArchived, "english", VariableLanguageUpdated);
@@ -1249,4 +1297,36 @@ namespace Modules
 			std::sort(MapList.begin(), MapList.end());
 		}
 	}
+	void ModuleGame::onVKeyboardInput(std::wstring input)
+	{
+		if (!forge_map.size())
+			return;
+		input.substr(0, 15);
+		if (input != map_name) {
+			const char* new_name = reinterpret_cast<const char*>(input.c_str());
+			int string_offset_1 = 0x48;
+			int string_offset_2 = 0x150;
+			for (int i = 0; i <= 31; i++) {
+				char current_char = 0;
+				if (i <= input.size() * 2)
+					current_char = new_name[i];
+				forge_map[string_offset_1] = current_char;
+				forge_map[string_offset_2] = current_char;
+				string_offset_1++;
+				string_offset_2++;
+			}
+		}
+		wchar_t filepath[0x100];
+		Patches::ContentItems::GetFilePathForMap(input, filepath);
+		FILE* file;
+		if (_wfopen_s(&file, filepath, L"wb") != 0 || !file)
+			return;
+		BYTE* map_data = forge_map.data();
+		fwrite(map_data, sizeof(BYTE), 0xF000, file);
+		fclose(file);
+		Patches::ContentItems::LoadBLF(filepath);
+		forge_map.clear();
+		return;
+	}
+
 }

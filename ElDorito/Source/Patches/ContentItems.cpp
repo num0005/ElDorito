@@ -21,6 +21,8 @@ namespace
 	char __fastcall FS_GetFiloForContentItemHook1(uint8_t* contentItem, void* unused, void* filo);
 	wchar_t* __fastcall FS_GetFilePathForContentItemHook(uint8_t* contentItem, void* unused, wchar_t* dest, size_t MaxCount);
 	char __fastcall Game_SetFlagAfterCopyBLFDataHook(uint8_t* flag, void* unused, char flagIdx, char set);
+	void GetFilePathForItem(wchar_t* dest, size_t MaxCount, const wchar_t* variantName, int variantType);
+	bool AddContentItem(wchar_t* itemPath);
 }
 
 namespace Patches::ContentItems
@@ -72,6 +74,12 @@ namespace Patches::ContentItems
 		Hook(0x34CCF0, FS_GetFiloForContentItemHook1).Apply();
 
 		Hook(0x34D376, Game_SetFlagAfterCopyBLFDataHook, HookFlags::IsCall).Apply();
+	}
+	void GetFilePathForMap(std::wstring name, wchar_t *path) {
+		GetFilePathForItem(path, 0x100, name.c_str(), 10);
+	}
+	bool LoadBLF(wchar_t* itemPath) {
+		return AddContentItem(itemPath);
 	}
 }
 
@@ -136,7 +144,7 @@ namespace
 		return AddContentItem((wchar_t*)unicode.c_str());
 	}
 
-	void GetFilePathForItem(wchar_t* dest, size_t MaxCount, wchar_t* variantName, int variantType)
+	void GetFilePathForItem(wchar_t* dest, size_t MaxCount,const wchar_t* variantName, int variantType)
 	{
 		wchar_t currentDir[256];
 		memset(currentDir, 0, 256 * sizeof(wchar_t));

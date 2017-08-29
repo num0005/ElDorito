@@ -30,8 +30,12 @@ namespace Modules
 		std::vector<std::string> FiltersExclude;
 		std::vector<std::string> FiltersInclude;
 
+		std::vector<BYTE> forge_map;
+		std::wstring map_name;
+
 		ModuleGame();
 		void UpdateMapList();
 		void UpdateCustomMapList();
+		void onVKeyboardInput(std::wstring input);
 	};
 }
